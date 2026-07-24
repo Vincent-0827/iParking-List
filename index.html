@@ -1,148 +1,1077 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iParking 停車場資訊整合平台</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        :root {
-            --primary-color: #2c3e50;
-            --accent-color: #3498db;
-            --success-color: #2ecc71;
-            --bg-color: #f4f7f6;
-        }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); padding: 20px; color: #333; margin: 0; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        h1 { margin: 0; font-size: 24px; color: var(--primary-color); }
-        .controls { display: flex; gap: 10px; align-items: center; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
-        .btn-refresh { background-color: var(--accent-color); color: white; }
-        .btn-refresh:hover { background-color: #2980b9; transform: translateY(-1px); }
-        .btn-export { background-color: var(--success-color); color: white; }
-        .btn-export:hover { background-color: #27ae60; transform: translateY(-1px); }
-        .status-bar { margin-bottom: 15px; font-size: 14px; color: #7f8c8d; background: #e8f4f8; padding: 10px; border-radius: 5px; border-left: 4px solid var(--accent-color); }
-        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eaeaea; }
-        th { background-color: var(--primary-color); color: white; font-weight: 500; }
-        tr:hover { background-color: #f9f9f9; }
-        /* 載入動畫 CSS */
-        .loader { display: none; border: 3px solid #f3f3f3; border-top: 3px solid var(--accent-color); border-radius: 50%; width: 18px; height: 18px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="俥酷 iParking 全台配合停車場查詢與 Excel 匯出" />
+  <title>iParking 全台配合停車場查詢</title>
+
+  <!-- 用於真正的 .xlsx 匯出；若 CDN 暫時無法使用，程式會自動改匯出 CSV。 -->
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --text: #182235;
+      --muted: #667085;
+      --line: #e3e8f0;
+      --primary: #1268d8;
+      --primary-dark: #0d4fa8;
+      --success: #087a55;
+      --warning: #9a6100;
+      --danger: #b42318;
+      --shadow: 0 16px 40px rgba(23, 40, 72, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at right top, rgba(18, 104, 216, 0.09), transparent 30rem),
+        var(--bg);
+      font-family:
+        Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+        system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .app {
+      width: min(1480px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 52px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.5fr 0.7fr;
+      gap: 24px;
+      align-items: center;
+      min-height: 230px;
+      padding: 34px;
+      overflow: hidden;
+      color: #fff;
+      border-radius: 28px;
+      background: linear-gradient(135deg, #0a397d, #1474e8);
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 350px;
+      height: 350px;
+      right: -100px;
+      top: -180px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.1);
+    }
+
+    .eyebrow {
+      margin: 0 0 9px;
+      font-size: .78rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      opacity: .75;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -.045em;
+    }
+
+    .hero p.description {
+      max-width: 760px;
+      margin: 16px 0 0;
+      color: rgba(255,255,255,.84);
+      line-height: 1.75;
+    }
+
+    .stats {
+      display: grid;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stat {
+      padding: 18px 20px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 17px;
+      background: rgba(255,255,255,.11);
+      backdrop-filter: blur(12px);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.85rem;
+      line-height: 1.15;
+    }
+
+    .stat span {
+      font-size: .82rem;
+      opacity: .78;
+    }
+
+    .panel {
+      margin-top: 22px;
+      padding: 20px;
+      border: 1px solid rgba(227,232,240,.9);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.94);
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 1.8fr) repeat(3, minmax(145px, .75fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      margin: 0 0 7px;
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 800;
+    }
+
+    .control {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+      transition: .18s ease;
+    }
+
+    .control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(18,104,216,.11);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn {
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      font-weight: 850;
+      transition: .16s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { cursor: wait; opacity: .65; transform: none; }
+
+    .btn-primary {
+      color: #fff;
+      background: var(--primary);
+      box-shadow: 0 8px 18px rgba(18,104,216,.2);
+    }
+
+    .btn-primary:hover { background: var(--primary-dark); }
+
+    .btn-secondary {
+      color: var(--text);
+      border-color: var(--line);
+      background: #fff;
+    }
+
+    .btn-soft {
+      color: var(--primary);
+      background: #ecf4ff;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-top: 17px;
+      padding-top: 17px;
+      border-top: 1px solid var(--line);
+    }
+
+    .meta-row p {
+      margin: 0;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.6;
+    }
+
+    .meta-row strong { color: var(--text); }
+
+    .status {
+      display: none;
+      margin-top: 13px;
+      padding: 12px 14px;
+      border-radius: 11px;
+      font-size: .84rem;
+      line-height: 1.6;
+    }
+
+    .status.show { display: block; }
+    .status.info { color: #184f95; background: #eaf3ff; }
+    .status.success { color: #086645; background: #e9f8f1; }
+    .status.warning { color: #855300; background: #fff5d8; }
+    .status.error { color: #9d2720; background: #ffeded; }
+
+    .table-card {
+      margin-top: 22px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .table-scroll { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      min-width: 1080px;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 14px 15px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      color: #46536a;
+      background: #f7f9fc;
+      font-size: .76rem;
+      white-space: nowrap;
+      letter-spacing: .02em;
+    }
+
+    tbody tr:hover { background: #f8fbff; }
+    tbody tr:last-child td { border-bottom: 0; }
+
+    .index-cell {
+      width: 62px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .name {
+      display: block;
+      font-weight: 900;
+    }
+
+    .sub {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+
+    .tag {
+      display: inline-flex;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: .74rem;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .tag-green { color: #08714b; background: #e8f8f1; }
+    .tag-blue { color: #145ab6; background: #eaf2ff; }
+    .tag-gray { color: #556074; background: #eef1f5; }
+
+    .link-buttons {
+      display: flex;
+      gap: 7px;
+    }
+
+    .mini-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 9px;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+      text-decoration: none;
+      font-size: .75rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .mini-link:hover {
+      border-color: #b8c8dd;
+      background: #f5f9ff;
+    }
+
+    .empty {
+      padding: 60px 20px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--text);
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 13px 15px;
+      border-top: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .pagination-info {
+      color: var(--muted);
+      font-size: .8rem;
+    }
+
+    .footer {
+      padding: 24px 5px 0;
+      color: var(--muted);
+      font-size: .76rem;
+      line-height: 1.7;
+      text-align: center;
+    }
+
+    @media (max-width: 1000px) {
+      .toolbar { grid-template-columns: 1fr 1fr; }
+      .toolbar .field:first-child { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 720px) {
+      .app { width: min(100% - 20px, 1480px); padding-top: 10px; }
+      .hero { grid-template-columns: 1fr; padding: 25px 20px; border-radius: 22px; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .panel { padding: 15px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .toolbar .field:first-child { grid-column: auto; }
+      .meta-row { align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (max-width: 460px) {
+      .stats { grid-template-columns: 1fr; }
+      .actions .btn { flex: 1 1 135px; }
+      .pagination { align-items: stretch; flex-direction: column; }
+      .pagination .actions { margin: 0; }
+    }
+  </style>
 </head>
+
 <body>
+  <main class="app">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">iParking Partner Lots</p>
+        <h1>全台配合<br>停車場查詢</h1>
+        <p class="description">
+          自動讀取俥酷 iParking「全台灣」停車場清單，整理停車場名稱、營業時間、
+          地址與詳細資訊連結，並支援篩選、重新整理及 Excel 匯出。
+        </p>
+      </div>
 
-<div class="container">
-    <div class="header">
-        <h1>iParking 台灣停車場清單</h1>
-        <div class="controls">
-            <div class="loader" id="loader"></div>
-            <button class="btn-refresh" onclick="fetchData()">🔄 重新整理</button>
-            <button class="btn-export" onclick="exportExcel()">📊 匯出 Excel</button>
+      <div class="stats">
+        <div class="stat">
+          <strong id="totalStat">0</strong>
+          <span>停車場總數</span>
         </div>
-    </div>
+        <div class="stat">
+          <strong id="cityStat">0</strong>
+          <span>涵蓋縣市</span>
+        </div>
+      </div>
+    </header>
 
-    <div class="status-bar" id="statusText">請點擊上方「重新整理」按鈕開始抓取資料。</div>
+    <section class="panel" aria-label="搜尋及匯出工具">
+      <div class="toolbar">
+        <div class="field">
+          <label for="keyword">關鍵字搜尋</label>
+          <input id="keyword" class="control" type="search"
+                 placeholder="搜尋停車場名稱、地址、縣市或行政區" autocomplete="off">
+        </div>
 
-    <table>
-        <thead>
+        <div class="field">
+          <label for="cityFilter">縣市</label>
+          <select id="cityFilter" class="control">
+            <option value="">全部縣市</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="hoursFilter">營業時間</label>
+          <select id="hoursFilter" class="control">
+            <option value="">全部</option>
+            <option value="24H">僅顯示 24H</option>
+            <option value="OTHER">非 24H</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="pageSize">每頁筆數</label>
+          <select id="pageSize" class="control">
+            <option value="15">15</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="refreshBtn" class="btn btn-primary" type="button">重新整理資料</button>
+        <button id="exportBtn" class="btn btn-soft" type="button">匯出成 Excel</button>
+        <button id="resetBtn" class="btn btn-secondary" type="button">清除篩選</button>
+        <a class="btn btn-secondary"
+           href="https://www.findata.com.tw/iparking/lots"
+           target="_blank" rel="noopener noreferrer"
+           style="display:inline-flex;align-items:center;text-decoration:none;">
+          開啟原始網站
+        </a>
+      </div>
+
+      <div class="meta-row">
+        <p>
+          篩選結果：<strong id="resultCount">0</strong> 筆
+          ／ 資料更新：<strong id="updatedAt">尚未更新</strong>
+        </p>
+        <p>資料來源為公開網頁；停車費率與營業狀態請以現場公告為準。</p>
+      </div>
+
+      <div id="statusBox" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead>
             <tr>
-                <th>站名</th>
-                <th>地址</th>
-                <th>平日收費</th>
-                <th>假日收費</th>
+              <th>序號</th>
+              <th>停車場名稱</th>
+              <th>縣市</th>
+              <th>行政區</th>
+              <th>營業時間</th>
+              <th>地址</th>
+              <th>聯絡電話</th>
+              <th>連結</th>
             </tr>
-        </thead>
-        <tbody id="tableBody">
-            <tr><td colspan="4" style="text-align: center; color: #999;">目前尚無資料</td></tr>
-        </tbody>
-    </table>
-</div>
+          </thead>
+          <tbody id="parkingBody"></tbody>
+        </table>
+      </div>
 
-<script>
-    let parkingData = [];
+      <div id="emptyState" class="empty" hidden>
+        <strong>目前沒有可顯示的資料</strong>
+        請按「重新整理資料」，或調整搜尋條件。
+      </div>
 
-    // 模擬抓取資料的非同步函式 (實務上這裡會放入跨域 Proxy 或真實 API 請求)
-    async function fetchData() {
-        const statusText = document.getElementById('statusText');
-        const tbody = document.getElementById('tableBody');
-        const loader = document.getElementById('loader');
+      <div class="pagination">
+        <div id="pageInfo" class="pagination-info">第 0 / 0 頁</div>
+        <div class="actions" style="margin:0">
+          <button id="prevBtn" class="btn btn-secondary" type="button">上一頁</button>
+          <button id="nextBtn" class="btn btn-secondary" type="button">下一頁</button>
+        </div>
+      </div>
+    </section>
 
-        // UI 狀態更新為「載入中」
-        statusText.innerText = "連線中：正在向目標伺服器請求最新資料...";
-        loader.style.display = 'block';
-        tbody.innerHTML = '';
-        parkingData = [];
+    <footer class="footer">
+      單一 index.html，可直接部署至 GitHub Pages。由於來源網站未必允許跨網域讀取，
+      重新整理功能會依序嘗試直接連線及公開文字代理；成功後資料會保存在本機瀏覽器中。
+    </footer>
+  </main>
 
-        try {
-            // 模擬網路延遲 1.5 秒，讓你感受載入動畫效果
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // 模擬成功抓取到的資料 (這解決了前台抓不到全部資料的問題，因為這是整理過後的陣列)
-            parkingData = [
-                { name: '高鐵桃園3站(立體)', address: '桃園市中壢區青埔里高鐵北路一段6號', weekday: '50元/小時', weekend: '50元/小時' },
-                { name: '后庄七街站', address: '台中市北屯區后庄七街76號後方', weekday: '30元/小時', weekend: '30元/小時' },
-                { name: '台北車站地下停車場', address: '台北市中正區鄭州路8號', weekday: '40元/小時', weekend: '50元/小時' },
-                { name: '信義新天地 A11', address: '台北市信義區松壽路11號', weekday: '100元/小時', weekend: '120元/小時' },
-                { name: '新竹巨城停車場', address: '新竹市東區中央路229號', weekday: '60元/小時', weekend: '60元/小時' }
-            ];
-            
-            statusText.innerText = `✅ 抓取完成！成功取得 ${parkingData.length} 筆最新停車場資訊。(最後更新：${new Date().toLocaleTimeString()})`;
-            renderTable();
+  <script>
+    "use strict";
 
-        } catch (error) {
-            statusText.innerText = "❌ 抓取失敗。可能是目標網站阻擋請求或網路不穩定。";
-        } finally {
-            // 關閉載入動畫
-            loader.style.display = 'none';
-        }
+    const SOURCE_URL = "https://www.findata.com.tw/iparking/lots";
+    const CACHE_KEY = "iparking-all-lots-cache-v2";
+    const CACHE_TIME_KEY = "iparking-all-lots-cache-time-v2";
+    const MIN_EXPECTED_RECORDS = 150;
+
+    const state = {
+      all: [],
+      filtered: [],
+      currentPage: 1
+    };
+
+    const el = {
+      totalStat: document.getElementById("totalStat"),
+      cityStat: document.getElementById("cityStat"),
+      keyword: document.getElementById("keyword"),
+      cityFilter: document.getElementById("cityFilter"),
+      hoursFilter: document.getElementById("hoursFilter"),
+      pageSize: document.getElementById("pageSize"),
+      refreshBtn: document.getElementById("refreshBtn"),
+      exportBtn: document.getElementById("exportBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      resultCount: document.getElementById("resultCount"),
+      updatedAt: document.getElementById("updatedAt"),
+      statusBox: document.getElementById("statusBox"),
+      parkingBody: document.getElementById("parkingBody"),
+      emptyState: document.getElementById("emptyState"),
+      pageInfo: document.getElementById("pageInfo"),
+      prevBtn: document.getElementById("prevBtn"),
+      nextBtn: document.getElementById("nextBtn")
+    };
+
+    function normalizeText(value = "") {
+      return String(value)
+        .replace(/\u00a0/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
-    // 將資料渲染至 HTML 表格
-    function renderTable() {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        parkingData.forEach(lot => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><strong>${lot.name}</strong></td>
-                <td>${lot.address}</td>
-                <td>${lot.weekday}</td>
-                <td>${lot.weekend}</td>
-            `;
-            tbody.appendChild(tr);
+    function escapeHtml(value = "") {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function absoluteUrl(url) {
+      if (!url) return "";
+      try {
+        return new URL(url, SOURCE_URL).href;
+      } catch {
+        return "";
+      }
+    }
+
+    function inferLocation(address = "", name = "") {
+      const normalized = address.replace(/^臺/g, "台");
+      const cities = [
+        "台北市", "新北市", "桃園市", "台中市", "台南市", "高雄市",
+        "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣", "彰化縣",
+        "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣",
+        "台東縣", "澎湖縣", "金門縣", "連江縣"
+      ];
+
+      let city = cities.find(item => normalized.startsWith(item)) || "";
+
+      // 原始頁面偶有只寫「宜蘭市」或省略縣市的地址。
+      if (!city && normalized.startsWith("宜蘭市")) city = "宜蘭縣";
+      if (!city && /建南高架|建國南路橋下/.test(name + normalized)) city = "台北市";
+
+      let remainder = normalized;
+      if (city && remainder.startsWith(city)) remainder = remainder.slice(city.length);
+      if (city === "宜蘭縣" && remainder.startsWith("宜蘭市")) {
+        // 保留宜蘭市作為行政區
+      }
+
+      const districtMatch = remainder.match(/^(.{1,5}?(?:區|市|鎮|鄉))/);
+      const district = districtMatch ? districtMatch[1] : "";
+
+      return { city: city || "未辨識", district: district || "—" };
+    }
+
+    function parseCardText(rawText, fallbackName = "") {
+      const text = normalizeText(rawText);
+      const hoursMatch = text.match(/營業(?:項目|時間)[：:]\s*(.*?)\s*地址[：:]/);
+      const addressMatch = text.match(/地址[：:]\s*(.*?)(?=(?:電話|Google|地圖|$))/);
+
+      let name = normalizeText(fallbackName);
+      if (!name || /營業(?:項目|時間)/.test(name)) {
+        const nameMatch = text.match(/^(.*?)\s*營業(?:項目|時間)[：:]/);
+        name = nameMatch ? normalizeText(nameMatch[1]) : name;
+      }
+
+      return {
+        name,
+        hours: hoursMatch ? normalizeText(hoursMatch[1]) : "",
+        address: addressMatch ? normalizeText(addressMatch[1]) : ""
+      };
+    }
+
+    function findCardContainer(anchor) {
+      let node = anchor;
+      let best = anchor.parentElement;
+
+      for (let i = 0; i < 7 && node; i += 1, node = node.parentElement) {
+        const text = normalizeText(node.textContent);
+        if (
+          /營業(?:項目|時間)[：:]/.test(text) &&
+          /地址[：:]/.test(text) &&
+          text.length < 1200
+        ) {
+          best = node;
+        }
+      }
+      return best || anchor.parentElement;
+    }
+
+    function parseHtmlSource(html) {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const detailAnchors = [
+        ...doc.querySelectorAll('a[href*="/iparking/lots/detail/"]')
+      ];
+
+      const records = [];
+      const seen = new Set();
+
+      for (const anchor of detailAnchors) {
+        const detailUrl = absoluteUrl(anchor.getAttribute("href"));
+        if (!detailUrl || seen.has(detailUrl)) continue;
+        seen.add(detailUrl);
+
+        const card = findCardContainer(anchor);
+        const parsed = parseCardText(
+          card ? card.textContent : anchor.textContent,
+          anchor.textContent
+        );
+
+        if (!parsed.name || !parsed.address) continue;
+
+        const telLink = card?.querySelector('a[href^="tel:"]');
+        const mapLink = card?.querySelector(
+          'a[href*="google.com/maps"], a[href*="maps.google"], a[href*="goo.gl/maps"]'
+        );
+        const location = inferLocation(parsed.address, parsed.name);
+
+        records.push({
+          id: detailUrl.split("/").filter(Boolean).pop() || detailUrl,
+          name: parsed.name,
+          city: location.city,
+          district: location.district,
+          hours: parsed.hours || "未提供",
+          address: parsed.address,
+          phone: normalizeText(telLink?.getAttribute("href")?.replace(/^tel:/, "") || ""),
+          detailUrl,
+          mapUrl: absoluteUrl(mapLink?.getAttribute("href")) ||
+            `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parsed.address)}`
         });
+      }
+
+      return records;
     }
 
-    // 匯出 Excel 功能
-    function exportExcel() {
-        if (parkingData.length === 0) {
-            alert("目前沒有資料可以匯出，請先點擊「重新整理」抓取資料！");
-            return;
+    function parseMarkdownSource(markdown) {
+      const records = [];
+      const seen = new Set();
+
+      // Jina Reader 通常會把每個停車場卡片轉成含詳細頁連結的 Markdown。
+      const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^)\s]+\/iparking\/lots\/detail\/[^)\s]+)\)/g;
+      let match;
+
+      while ((match = linkRegex.exec(markdown)) !== null) {
+        const label = normalizeText(match[1]);
+        const detailUrl = match[2];
+        if (seen.has(detailUrl)) continue;
+
+        const parsed = parseCardText(label, label);
+        if (!parsed.name || !parsed.address) continue;
+
+        seen.add(detailUrl);
+        const location = inferLocation(parsed.address, parsed.name);
+
+        records.push({
+          id: detailUrl.split("/").filter(Boolean).pop() || detailUrl,
+          name: parsed.name,
+          city: location.city,
+          district: location.district,
+          hours: parsed.hours || "未提供",
+          address: parsed.address,
+          phone: "",
+          detailUrl,
+          mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parsed.address)}`
+        });
+      }
+
+      // 部分 Reader 版本會保留 HTML；再補一次 HTML 解析。
+      if (records.length < MIN_EXPECTED_RECORDS && /<a[\s>]/i.test(markdown)) {
+        return parseHtmlSource(markdown);
+      }
+
+      return records;
+    }
+
+    function deduplicate(records) {
+      const map = new Map();
+
+      for (const item of records) {
+        const key = item.detailUrl || `${item.name}|${item.address}`;
+        if (!map.has(key)) map.set(key, item);
+      }
+
+      return [...map.values()].sort((a, b) =>
+        `${a.city}${a.district}${a.name}`.localeCompare(
+          `${b.city}${b.district}${b.name}`,
+          "zh-Hant"
+        )
+      );
+    }
+
+    async function fetchWithTimeout(url, timeoutMs = 22000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+          headers: { "Accept": "text/html,text/plain,*/*" }
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.text();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function downloadLatestRecords() {
+      const encoded = encodeURIComponent(SOURCE_URL);
+      const candidates = [
+        {
+          label: "來源網站",
+          url: SOURCE_URL,
+          parser: parseHtmlSource
+        },
+        {
+          label: "Jina Reader",
+          url: "https://r.jina.ai/http://www.findata.com.tw/iparking/lots",
+          parser: parseMarkdownSource
+        },
+        {
+          label: "AllOrigins",
+          url: `https://api.allorigins.win/raw?url=${encoded}`,
+          parser: parseHtmlSource
+        },
+        {
+          label: "CorsProxy",
+          url: `https://corsproxy.io/?url=${encoded}`,
+          parser: parseHtmlSource
+        },
+        {
+          label: "CodeTabs Proxy",
+          url: `https://api.codetabs.com/v1/proxy?quest=${encoded}`,
+          parser: parseHtmlSource
         }
-        
-        // 準備客製化的 Excel 欄位名稱
-        const exportData = parkingData.map(lot => ({
-            "停車場名稱": lot.name,
-            "詳細地址": lot.address,
-            "平日收費標準": lot.weekday,
-            "假日收費標準": lot.weekend
-        }));
+      ];
 
-        // 使用 SheetJS 將 JSON 轉換為 Excel 活頁簿
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "停車場清單");
-        
-        // 觸發瀏覽器下載
-        XLSX.writeFile(workbook, `iParking_台灣停車場資料_${new Date().getTime()}.xlsx`);
+      const errors = [];
+
+      for (const candidate of candidates) {
+        try {
+          setStatus(`正在透過「${candidate.label}」讀取全台停車場資料……`, "info");
+          const content = await fetchWithTimeout(candidate.url);
+          const parsed = deduplicate(candidate.parser(content));
+
+          if (parsed.length < MIN_EXPECTED_RECORDS) {
+            throw new Error(`僅辨識到 ${parsed.length} 筆，可能不是完整清單`);
+          }
+
+          return {
+            records: parsed,
+            sourceLabel: candidate.label
+          };
+        } catch (error) {
+          errors.push(`${candidate.label}：${error.message}`);
+          console.warn(candidate.label, error);
+        }
+      }
+
+      throw new Error(errors.join("；"));
     }
 
-    // 網頁開啟時，自動執行一次抓取
-    window.onload = fetchData;
-</script>
+    function setStatus(message, type = "info") {
+      el.statusBox.className = `status show ${type}`;
+      el.statusBox.textContent = message;
+    }
 
+    function clearStatus() {
+      el.statusBox.className = "status";
+      el.statusBox.textContent = "";
+    }
+
+    function loadCache() {
+      try {
+        const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "[]");
+        if (!Array.isArray(cached) || !cached.length) return false;
+
+        state.all = deduplicate(cached);
+        const cacheTime = localStorage.getItem(CACHE_TIME_KEY);
+        el.updatedAt.textContent = cacheTime
+          ? new Date(cacheTime).toLocaleString("zh-TW", { hour12: false })
+          : "本機快取";
+
+        rebuildCityOptions();
+        applyFilters();
+        setStatus(
+          `已先載入瀏覽器保存的 ${state.all.length} 筆資料，可按「重新整理資料」取得最新清單。`,
+          "info"
+        );
+        return true;
+      } catch (error) {
+        console.warn("讀取快取失敗", error);
+        return false;
+      }
+    }
+
+    function saveCache(records) {
+      const now = new Date().toISOString();
+      localStorage.setItem(CACHE_KEY, JSON.stringify(records));
+      localStorage.setItem(CACHE_TIME_KEY, now);
+      el.updatedAt.textContent = new Date(now).toLocaleString("zh-TW", { hour12: false });
+    }
+
+    function rebuildCityOptions() {
+      const selected = el.cityFilter.value;
+      const cities = [...new Set(
+        state.all.map(item => item.city).filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b, "zh-Hant"));
+
+      el.cityFilter.innerHTML =
+        '<option value="">全部縣市</option>' +
+        cities.map(city =>
+          `<option value="${escapeHtml(city)}">${escapeHtml(city)}</option>`
+        ).join("");
+
+      if (cities.includes(selected)) el.cityFilter.value = selected;
+
+      el.totalStat.textContent = state.all.length.toLocaleString("zh-TW");
+      el.cityStat.textContent = cities.filter(city => city !== "未辨識").length;
+    }
+
+    function applyFilters() {
+      const keyword = normalizeText(el.keyword.value).toLowerCase();
+      const city = el.cityFilter.value;
+      const hours = el.hoursFilter.value;
+
+      state.filtered = state.all.filter(item => {
+        const haystack = [
+          item.name, item.city, item.district, item.hours, item.address, item.phone
+        ].join(" ").toLowerCase();
+
+        const keywordMatched = !keyword || haystack.includes(keyword);
+        const cityMatched = !city || item.city === city;
+        const hoursMatched =
+          !hours ||
+          (hours === "24H" && item.hours.toUpperCase().includes("24H")) ||
+          (hours === "OTHER" && !item.hours.toUpperCase().includes("24H"));
+
+        return keywordMatched && cityMatched && hoursMatched;
+      });
+
+      state.currentPage = 1;
+      render();
+    }
+
+    function getPageSize() {
+      return Number.parseInt(el.pageSize.value, 10) || 25;
+    }
+
+    function render() {
+      const pageSize = getPageSize();
+      const totalPages = Math.max(1, Math.ceil(state.filtered.length / pageSize));
+      state.currentPage = Math.min(Math.max(state.currentPage, 1), totalPages);
+
+      const start = (state.currentPage - 1) * pageSize;
+      const pageRows = state.filtered.slice(start, start + pageSize);
+
+      el.resultCount.textContent = state.filtered.length.toLocaleString("zh-TW");
+      el.emptyState.hidden = pageRows.length > 0;
+      el.parkingBody.innerHTML = pageRows.map((item, index) => {
+        const displayIndex = start + index + 1;
+        const is24h = item.hours.toUpperCase().includes("24H");
+        const hourClass = is24h ? "tag-green" : "tag-blue";
+
+        return `
+          <tr>
+            <td class="index-cell">${displayIndex}</td>
+            <td>
+              <span class="name">${escapeHtml(item.name)}</span>
+              <span class="sub">${escapeHtml(item.id || "")}</span>
+            </td>
+            <td><span class="tag tag-gray">${escapeHtml(item.city)}</span></td>
+            <td>${escapeHtml(item.district)}</td>
+            <td><span class="tag ${hourClass}">${escapeHtml(item.hours)}</span></td>
+            <td>${escapeHtml(item.address)}</td>
+            <td>${item.phone ? escapeHtml(item.phone) : "—"}</td>
+            <td>
+              <div class="link-buttons">
+                <a class="mini-link" href="${escapeHtml(item.detailUrl)}"
+                   target="_blank" rel="noopener noreferrer">詳細</a>
+                <a class="mini-link" href="${escapeHtml(item.mapUrl)}"
+                   target="_blank" rel="noopener noreferrer">地圖</a>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      el.pageInfo.textContent =
+        state.filtered.length
+          ? `第 ${state.currentPage} / ${totalPages} 頁，顯示第 ${start + 1}–${Math.min(start + pageSize, state.filtered.length)} 筆`
+          : "第 0 / 0 頁";
+
+      el.prevBtn.disabled = state.currentPage <= 1 || !state.filtered.length;
+      el.nextBtn.disabled = state.currentPage >= totalPages || !state.filtered.length;
+      el.exportBtn.disabled = !state.filtered.length;
+    }
+
+    async function refreshData() {
+      el.refreshBtn.disabled = true;
+      el.refreshBtn.textContent = "整理資料中…";
+
+      try {
+        const result = await downloadLatestRecords();
+        state.all = result.records;
+        saveCache(state.all);
+        rebuildCityOptions();
+        applyFilters();
+
+        setStatus(
+          `重新整理完成：透過「${result.sourceLabel}」取得 ${state.all.length} 筆全台配合停車場資料。`,
+          "success"
+        );
+      } catch (error) {
+        if (state.all.length) {
+          setStatus(
+            `目前無法連線更新，已保留本機的 ${state.all.length} 筆資料。原因：${error.message}`,
+            "warning"
+          );
+        } else {
+          setStatus(
+            `資料更新失敗。來源網站可能限制跨網域存取，請稍後重試或直接開啟原始網站。原因：${error.message}`,
+            "error"
+          );
+        }
+      } finally {
+        el.refreshBtn.disabled = false;
+        el.refreshBtn.textContent = "重新整理資料";
+      }
+    }
+
+    function exportData() {
+      if (!state.filtered.length) return;
+
+      const rows = state.filtered.map((item, index) => ({
+        "序號": index + 1,
+        "停車場名稱": item.name,
+        "縣市": item.city,
+        "行政區": item.district,
+        "營業時間": item.hours,
+        "地址": item.address,
+        "聯絡電話": item.phone,
+        "詳細資訊網址": item.detailUrl,
+        "Google 地圖": item.mapUrl
+      }));
+
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = `iParking全台配合停車場_${date}`;
+
+      if (window.XLSX) {
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        worksheet["!cols"] = [
+          { wch: 8 }, { wch: 26 }, { wch: 10 }, { wch: 10 },
+          { wch: 24 }, { wch: 48 }, { wch: 18 }, { wch: 46 }, { wch: 46 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "全台停車場");
+        XLSX.writeFile(workbook, `${filename}.xlsx`);
+        setStatus(`已匯出 ${rows.length} 筆 Excel 資料。`, "success");
+        return;
+      }
+
+      // CDN 無法載入時的備援：匯出 Excel 可直接開啟的 UTF-8 CSV。
+      const headers = Object.keys(rows[0]);
+      const csvEscape = value => `"${String(value ?? "").replaceAll('"', '""')}"`;
+      const csv = [
+        headers.map(csvEscape).join(","),
+        ...rows.map(row => headers.map(key => csvEscape(row[key])).join(","))
+      ].join("\r\n");
+
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${filename}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+
+      setStatus(
+        `Excel 元件暫時無法載入，已改匯出 ${rows.length} 筆 CSV，可直接用 Excel 開啟。`,
+        "warning"
+      );
+    }
+
+    function resetFilters() {
+      el.keyword.value = "";
+      el.cityFilter.value = "";
+      el.hoursFilter.value = "";
+      el.pageSize.value = "25";
+      applyFilters();
+      clearStatus();
+    }
+
+    el.keyword.addEventListener("input", applyFilters);
+    el.cityFilter.addEventListener("change", applyFilters);
+    el.hoursFilter.addEventListener("change", applyFilters);
+    el.pageSize.addEventListener("change", () => {
+      state.currentPage = 1;
+      render();
+    });
+
+    el.refreshBtn.addEventListener("click", refreshData);
+    el.exportBtn.addEventListener("click", exportData);
+    el.resetBtn.addEventListener("click", resetFilters);
+
+    el.prevBtn.addEventListener("click", () => {
+      if (state.currentPage > 1) {
+        state.currentPage -= 1;
+        render();
+        window.scrollTo({ top: document.querySelector(".table-card").offsetTop - 14, behavior: "smooth" });
+      }
+    });
+
+    el.nextBtn.addEventListener("click", () => {
+      const totalPages = Math.ceil(state.filtered.length / getPageSize());
+      if (state.currentPage < totalPages) {
+        state.currentPage += 1;
+        render();
+        window.scrollTo({ top: document.querySelector(".table-card").offsetTop - 14, behavior: "smooth" });
+      }
+    });
+
+    // 啟動：先顯示本機快取；若是第一次使用，立即抓取全台資料。
+    const hasCache = loadCache();
+    if (!hasCache) {
+      refreshData();
+    } else {
+      render();
+    }
+  </script>
 </body>
 </html>
